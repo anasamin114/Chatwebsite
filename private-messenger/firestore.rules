@@ -1,0 +1,140 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 1. Global Catch-All Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // helper to check bilateral connection ID
+    function isValidBilateralId(id, u1, u2) {
+      return id == u1 + '_' + u2 || id == u2 + '_' + u1;
+    }
+
+    // 2. Users Collection Rules
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() 
+                    && request.auth.uid == userId 
+                    && isValidId(userId)
+                    && request.resource.data.id == userId
+                    && request.resource.data.uid is string && request.resource.data.uid.size() >= 3 && request.resource.data.uid.size() <= 32
+                    && request.resource.data.displayName is string && request.resource.data.displayName.size() >= 1 && request.resource.data.displayName.size() <= 64
+                    && request.resource.data.bio is string && request.resource.data.bio.size() <= 300
+                    && request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 350000
+                    && request.resource.data.coverURL is string && request.resource.data.coverURL.size() <= 350000
+                    && request.resource.data.createdAt == request.time;
+                    
+      allow update: if isSignedIn() 
+                    && request.auth.uid == userId
+                    && request.resource.data.id == userId
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.displayName is string && request.resource.data.displayName.size() >= 1 && request.resource.data.displayName.size() <= 64
+                    && request.resource.data.bio is string && request.resource.data.bio.size() <= 300
+                    && request.resource.data.photoURL is string && request.resource.data.photoURL.size() <= 350000
+                    && request.resource.data.coverURL is string && request.resource.data.coverURL.size() <= 350000;
+    }
+
+    // 3. Connections Collection Rules
+    match /connections/{connectionId} {
+      allow read: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      
+      allow create: if isSignedIn()
+                    && isValidId(connectionId)
+                    && isValidBilateralId(connectionId, request.resource.data.senderId, request.resource.data.receiverId)
+                    && request.resource.data.senderId == request.auth.uid
+                    && request.resource.data.receiverId != request.auth.uid
+                    && request.resource.data.status == 'requested'
+                    && request.resource.data.senderUid is string && request.resource.data.senderUid.size() >= 3
+                    && request.resource.data.receiverUid is string && request.resource.data.receiverUid.size() >= 3
+                    && request.resource.data.senderName is string && request.resource.data.senderName.size() >= 1
+                    && request.resource.data.receiverName is string && request.resource.data.receiverName.size() >= 1
+                    && request.resource.data.createdAt == request.time
+                    && request.resource.data.updatedAt == request.time;
+                    
+      allow update: if isSignedIn()
+                    && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid)
+                    && resource.data.receiverId == request.auth.uid 
+                    && (request.resource.data.status == 'accepted' || request.resource.data.status == 'declined')
+                    && request.resource.data.updatedAt == request.time
+                    && request.resource.data.senderId == resource.data.senderId
+                    && request.resource.data.receiverId == resource.data.receiverId
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.senderUid == resource.data.senderUid
+                    && request.resource.data.receiverUid == resource.data.receiverUid
+                    && request.resource.data.senderName == resource.data.senderName
+                    && request.resource.data.receiverName == resource.data.receiverName;
+                    
+      allow delete: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+    }
+
+    // 4. Messages Collection Rules
+    match /messages/{messageId} {
+      allow read: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      
+      allow create: if isSignedIn()
+                    && isValidId(messageId)
+                    && request.resource.data.senderId == request.auth.uid
+                    && request.resource.data.createdAt == request.time
+                    && (request.resource.data.type == 'text' || request.resource.data.type == 'image' || request.resource.data.type == 'video' || request.resource.data.type == 'emoji')
+                    && request.resource.data.read == false
+                    && isValidBilateralId(request.resource.data.conversationId, request.resource.data.senderId, request.resource.data.receiverId)
+                    // Core Invariant: MUST be friends to chat
+                    && exists(/databases/$(database)/documents/connections/$(request.resource.data.conversationId))
+                    && get(/databases/$(database)/documents/connections/$(request.resource.data.conversationId)).data.status == 'accepted'
+                    && (request.resource.data.text is string && request.resource.data.text.size() <= 5000)
+                    && (request.resource.data.mediaUrl is string && request.resource.data.mediaUrl.size() <= 350000);
+                    
+      allow update: if isSignedIn()
+                    && resource.data.receiverId == request.auth.uid
+                    && request.resource.data.read == true
+                    && request.resource.data.senderId == resource.data.senderId
+                    && request.resource.data.receiverId == resource.data.receiverId
+                    && request.resource.data.createdAt == resource.data.createdAt
+                    && request.resource.data.conversationId == resource.data.conversationId
+                    && request.resource.data.type == resource.data.type
+                    && request.resource.data.text == resource.data.text
+                    && request.resource.data.mediaUrl == resource.data.mediaUrl;
+                    
+      allow delete: if false; // Private chats are permanent logs
+    }
+
+    // 5. Notifications Collection Rules
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      
+      allow create: if isSignedIn()
+                    && isValidId(notificationId)
+                    && request.resource.data.senderId == request.auth.uid
+                    && request.resource.data.userId != request.auth.uid
+                    && request.resource.data.read == false
+                    && (request.resource.data.type == 'friend_request' || request.resource.data.type == 'friend_accepted' || request.resource.data.type == 'message')
+                    && request.resource.data.senderUid is string
+                    && request.resource.data.senderName is string
+                    && request.resource.data.createdAt == request.time;
+                    
+      allow update: if isSignedIn()
+                    && resource.data.userId == request.auth.uid
+                    && (request.resource.data.read == true || request.resource.data.read == false)
+                    && request.resource.data.senderId == resource.data.senderId
+                    && request.resource.data.userId == resource.data.userId
+                    && request.resource.data.type == resource.data.type
+                    && request.resource.data.senderUid == resource.data.senderUid
+                    && request.resource.data.senderName == resource.data.senderName
+                    && request.resource.data.createdAt == resource.data.createdAt;
+                    
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid);
+    }
+  }
+}

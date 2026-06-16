@@ -1,0 +1,198 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with identifier, display name, bio, and visual assets",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Firebase user authentication ID"
+        },
+        "uid": {
+          "type": "string",
+          "description": "Clean human-readable user ID generated at signup"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display username"
+        },
+        "bio": {
+          "type": "string",
+          "description": "Short bio description in profile"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Base64 encoded string or image URL for avatar"
+        },
+        "coverURL": {
+          "type": "string",
+          "description": "Base64 encoded string or image URL for cover"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of profile creation"
+        }
+      },
+      "required": ["id", "uid", "displayName", "createdAt"]
+    },
+    "Connection": {
+      "title": "Friend Connection",
+      "description": "Represents the bilateral association and friend requests/accepted states",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the connection record"
+        },
+        "senderId": {
+          "type": "string",
+          "description": "User ID of the connection request sender"
+        },
+        "receiverId": {
+          "type": "string",
+          "description": "User ID of the connection request receiver"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["requested", "accepted", "declined"],
+          "description": "Current status of friendship connection"
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Sender displayName stored denormalized"
+        },
+        "receiverName": {
+          "type": "string",
+          "description": "Receiver displayName stored denormalized"
+        },
+        "senderUid": {
+          "type": "string",
+          "description": "Sender simple UID stored denormalized"
+        },
+        "receiverUid": {
+          "type": "string",
+          "description": "Receiver simple UID stored denormalized"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of connection update"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of connection creation"
+        }
+      },
+      "required": ["senderId", "receiverId", "status", "senderUid", "receiverUid", "updatedAt", "createdAt"]
+    },
+    "Message": {
+      "title": "Private Message",
+      "description": "Message structure with media and type attachments",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Message ID"
+        },
+        "conversationId": {
+          "type": "string",
+          "description": "Bilateral conversation identifier (lexicographically ordered user IDs)"
+        },
+        "senderId": {
+          "type": "string",
+          "description": "UID of the message sender"
+        },
+        "receiverId": {
+          "type": "string",
+          "description": "UID of the message receiver"
+        },
+        "text": {
+          "type": "string",
+          "description": "Content text of message"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["text", "image", "video", "emoji"],
+          "description": "Type classification of private message"
+        },
+        "mediaUrl": {
+          "type": "string",
+          "description": "Optional Base64 data-URL or direct media link"
+        },
+        "read": {
+          "type": "boolean",
+          "description": "Receipt reading indicator"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of private transmission"
+        }
+      },
+      "required": ["conversationId", "senderId", "receiverId", "type", "read", "createdAt"]
+    },
+    "Notification": {
+      "title": "In-app Alert Notification",
+      "description": "Contextual notifications for chats and requests",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Notification identifier"
+        },
+        "userId": {
+          "type": "string",
+          "description": "recipient authenticated user ID"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["friend_request", "friend_accepted", "message"],
+          "description": "Classification code of alert trigger"
+        },
+        "senderId": {
+          "type": "string",
+          "description": "Causing origin user ID"
+        },
+        "senderName": {
+          "type": "string",
+          "description": "Display name of producing entity"
+        },
+        "senderUid": {
+          "type": "string",
+          "description": "Clean human readable UID of producing entity"
+        },
+        "read": {
+          "type": "boolean",
+          "description": "Indicator if recipient viewed this item"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when triggered"
+        }
+      },
+      "required": ["userId", "type", "senderId", "senderName", "senderUid", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "User" },
+      "description": "Collection of private chatter member profiles indexed by auth UID"
+    },
+    "connections/{connectionId}": {
+      "schema": { "$ref": "Connection" },
+      "description": "Collection of distinct friend requests and friendships"
+    },
+    "messages/{messageId}": {
+      "schema": { "$ref": "Message" },
+      "description": "Collection of atomic direct peer private messages"
+    },
+    "notifications/{notificationId}": {
+      "schema": { "$ref": "Notification" },
+      "description": "Sub-channels of notifications and alerts indexed globally with targeted queries"
+    }
+  }
+}
